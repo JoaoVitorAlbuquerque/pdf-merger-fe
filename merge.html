@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>PDF Tools</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    nav a { margin-right: 20px; cursor: pointer; }
+    section { display: none; }
+    section.active { display: block; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="#/merge">Mesclar PDFs</a>
+    <a href="#/message">Mensagem para PDF</a>
+  </nav>
+
+  <!-- Seção de Mesclagem -->
+  <section id="merge-section">
+    <h2>Mesclar PDFs</h2>
+    <!-- Aqui entra a interface de mesclagem que você já tem -->
+  </section>
+
+  <!-- Seção de Conversão de Mensagens -->
+  <section id="message-section">
+    <h2>Mensagem para PDF</h2>
+    <!-- Aqui entra a interface de conversão de txt/email para PDF -->
+  </section>
+
+  <script>
+    function showRoute() {
+      const hash = window.location.hash || '#/merge';
+      document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+      if (hash === '#/merge') {
+        document.getElementById('merge-section').classList.add('active');
+      } else if (hash === '#/message') {
+        document.getElementById('message-section').classList.add('active');
+      }
+    }
+
+    window.addEventListener('hashchange', showRoute);
+    showRoute(); // Inicialização
+  </script>
+</body>
+</html>
+
+<-->
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mesclar PDFs com Visualização</title>
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.13.216/pdf.min.js"></script>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    #drop-zone {
+      border: 2px dashed #ccc;
+      padding: 30px;
+      text-align: center;
+      margin-bottom: 20px;
+      cursor: pointer;
+    }
+    #preview {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .pdf-thumb {
+      position: relative;
+      border: 1px solid #ddd;
+      padding: 4px;
+      width: 120px;
+      text-align: center;
+      background: #fff;
+      cursor: move;
+    }
+    .pdf-thumb canvas {
+      width: 100%;
+    }
+    .loading { display: none; color: green; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>Mesclar PDFs</h1>
+
+  <div id="drop-zone" onclick="fileInput.click()">Clique ou arraste os PDFs aqui</div>
+  <input type="file" id="fileInput" multiple accept=".pdf" style="display: none" />
+
+  <div id="preview"></div>
+
+  <label>Nome do arquivo final: </label>
+  <input type="text" id="outputName" value="mesclado.pdf" /><br><br>
+
+  <button onclick="mergePDFs()">Mesclar PDFs</button>
+  <button onclick="resetAll()">Reiniciar</button>
+  <div class="loading" id="loading">Gerando PDF...</div>
+
+  <script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('fileInput');
+    const preview = document.getElementById('preview');
+    const loading = document.getElementById('loading');
+    let pdfFiles = [];
+
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.style.background = '#e8e8e8';
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.style.background = '');
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.style.background = '';
+      handleFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+    function handleFiles(files) {
+      for (let file of files) {
+        if (file.type === 'application/pdf') {
+          pdfFiles.push(file);
+        }
+      }
+      renderPreviews();
+    }
+
+    async function renderPreviews() {
+      preview.innerHTML = '';
+      for (let i = 0; i < pdfFiles.length; i++) {
+        const file = pdfFiles[i];
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        const viewport = page.getViewport({ scale: 0.3 });
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        await page.render({ canvasContext: context, viewport }).promise;
+
+        const div = document.createElement('div');
+        div.className = 'pdf-thumb';
+        div.draggable = true;
+        div.dataset.index = i;
+        div.appendChild(canvas);
+        div.append(file.name);
+
+        div.addEventListener('dragstart', e => e.dataTransfer.setData('index', i));
+        div.addEventListener('dragover', e => e.preventDefault());
+        div.addEventListener('drop', e => {
+          e.preventDefault();
+          const from = e.dataTransfer.getData('index');
+          const to = e.currentTarget.dataset.index;
+          const temp = pdfFiles[from];
+          pdfFiles[from] = pdfFiles[to];
+          pdfFiles[to] = temp;
+          renderPreviews();
+        });
+
+        preview.appendChild(div);
+      }
+    }
+
+    async function mergePDFs() {
+      if (pdfFiles.length === 0) return alert('Selecione arquivos PDF primeiro!');
+      loading.style.display = 'block';
+
+      const mergedPdf = await PDFLib.PDFDocument.create();
+
+      for (let file of pdfFiles) {
+        const bytes = await file.arrayBuffer();
+        const pdf = await PDFLib.PDFDocument.load(bytes);
+        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+        copiedPages.forEach(p => mergedPdf.addPage(p));
+      }
+
+      const mergedBytes = await mergedPdf.save();
+      const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = document.getElementById('outputName').value || 'mesclado.pdf';
+      a.click();
+
+      loading.style.display = 'none';
+    }
+
+    function resetAll() {
+      pdfFiles = [];
+      preview.innerHTML = '';
+      fileInput.value = '';
+    }
+  </script>
+</body>
+</html>
+
+--------
+
+<hr><br>
+<h2>Converter e-mail (.txt) para PDF</h2>
+<input type="file" id="txtFileInput" accept=".txt" /><br><br>
+<input type="text" id="txtPdfName" value="email.pdf" placeholder="Nome do PDF" /><br><br>
+<button onclick="convertTxtToPDF()">Converter para PDF</button>
+
+<script>
+  async function convertTxtToPDF() {
+    const input = document.getElementById('txtFileInput');
+    const fileName = document.getElementById('txtPdfName').value.trim() || 'email.pdf';
+
+    if (!input.files.length) {
+      alert('Selecione um arquivo .txt');
+      return;
+    }
+
+    const file = input.files[0];
+    const text = await file.text();
+
+    const { PDFDocument, StandardFonts, rgb } = PDFLib;
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595.28, 841.89]); // A4
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontSize = 14;
+    const maxWidth = 500;
+    const lineHeight = fontSize + 4;
+
+    function splitText(text, maxWidth) {
+      const words = text.split(' ');
+      const lines = [];
+      let line = '';
+      for (let word of words) {
+        const testLine = line + word + ' ';
+        const width = font.widthOfTextAtSize(testLine, fontSize);
+        if (width > maxWidth) {
+          lines.push(line);
+          line = word + ' ';
+        } else {
+          line = testLine;
+        }
+      }
+      lines.push(line);
+      return lines;
+    }
+
+    const lines = splitText(text, maxWidth);
+    let y = page.getHeight() - 50;
+    lines.forEach(line => {
+      page.drawText(line, {
+        x: 50,
+        y,
+        size: fontSize,
+        font,
+        color: rgb(0, 0, 0),
+      });
+      y -= lineHeight;
+      if (y < 50) {
+        page = pdfDoc.addPage([595.28, 841.89]);
+        y = page.getHeight() - 50;
+      }
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+  }
+</script>
