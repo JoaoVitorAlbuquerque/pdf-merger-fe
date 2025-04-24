@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mesclar PDFs</title>
+  <style>
+    #loader {
+      display: none;
+      margin-top: 10px;
+      font-weight: bold;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mesclar PDFs no navegador</h1>
+
+  <label>
+    Nome do arquivo final:
+    <input type="text" id="fileNameInput" placeholder="Ex: arquivo-final.pdf" />
+  </label>
+  <br /><br />
+
+  <input type="file" id="pdfInput" multiple accept="application/pdf" />
+  <button onclick="mergePDFs()">Mesclar PDFs</button>
+
+  <div id="loader">Gerando PDF, aguarde...</div>
+
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+
+  <script>
+    async function mergePDFs() {
+      const input = document.getElementById('pdfInput');
+      const fileNameInput = document.getElementById('fileNameInput');
+      const loader = document.getElementById('loader');
+      const files = input.files;
+
+      if (!files.length) {
+        alert('Selecione pelo menos um arquivo PDF.');
+        return;
+      }
+
+      loader.style.display = 'block';
+
+      try {
+        const { PDFDocument } = PDFLib;
+        const mergedPdf = await PDFDocument.create();
+
+        for (const file of files) {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await PDFDocument.load(arrayBuffer);
+          const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+          copiedPages.forEach(page => mergedPdf.addPage(page));
+        }
+
+        const mergedPdfBytes = await mergedPdf.save();
+        const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+
+        const customFileName = fileNameInput.value.trim() || 'merged.pdf';
+        const fileName = customFileName.endsWith('.pdf') ? customFileName : customFileName + '.pdf';
+
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (err) {
+        alert('Erro ao mesclar PDFs: ' + err.message);
+      } finally {
+        loader.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>
