@@ -7,6 +7,10 @@
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <style>
     body { font-family: Arial; padding: 20px; }
+    .button-style {
+      padding: 16px;
+      cursor: pointer;
+    }
     #drop-zone {
       border: 2px dashed #ccc;
       padding: 30px;
@@ -35,8 +39,8 @@
   <label>Nome do arquivo final: </label>
   <input type="text" id="outputName" placeholder="ex: mesclado.pdf" value="mesclado.pdf"/><br><br>
 
-  <button onclick="mergePDFs()">Mesclar PDFs</button>
-  <button onclick="resetAll()">Reiniciar</button>
+  <button class="button-style" onclick="mergePDFs()">Mesclar PDFs</button>
+  <button class="button-style" onclick="resetAll()">Reiniciar</button>
   <div class="loading" id="loading">Gerando PDF...</div>
 
   <script>
