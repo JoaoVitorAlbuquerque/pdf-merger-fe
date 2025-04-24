@@ -2,74 +2,138 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Mesclar PDFs</title>
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <style>
-    #loader {
-      display: none;
-      margin-top: 10px;
-      font-weight: bold;
-      color: #444;
+    body { font-family: Arial; padding: 20px; }
+    #drop-zone {
+      border: 2px dashed #ccc;
+      padding: 30px;
+      text-align: center;
+      margin-bottom: 20px;
+      cursor: pointer;
     }
+    .file-list { list-style: none; padding: 0; }
+    .file-item {
+      padding: 8px;
+      background: #f1f1f1;
+      margin-bottom: 4px;
+      cursor: move;
+    }
+    .loading { display: none; color: green; margin: 10px 0; }
   </style>
 </head>
 <body>
-  <h1>Mesclar PDFs no navegador</h1>
+  <h1>Mesclar PDFs</h1>
 
-  <label>
-    Nome do arquivo final:
-    <input type="text" id="fileNameInput" placeholder="Ex: arquivo-final.pdf" />
-  </label>
-  <br /><br />
+  <div id="drop-zone" onclick="fileInput.click()">Clique ou arraste os PDFs aqui</div>
+  <input type="file" id="fileInput" multiple accept=".pdf" style="display: none" />
 
-  <input type="file" id="pdfInput" multiple accept="application/pdf" />
+  <ul id="fileList" class="file-list"></ul>
+
+  <label>Nome do arquivo final: </label>
+  <input type="text" id="outputName" placeholder="ex: mesclado.pdf" value="mesclado.pdf"/><br><br>
+
   <button onclick="mergePDFs()">Mesclar PDFs</button>
-
-  <div id="loader">Gerando PDF, aguarde...</div>
-
-  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <button onclick="resetAll()">Reiniciar</button>
+  <div class="loading" id="loading">Gerando PDF...</div>
 
   <script>
-    async function mergePDFs() {
-      const input = document.getElementById('pdfInput');
-      const fileNameInput = document.getElementById('fileNameInput');
-      const loader = document.getElementById('loader');
-      const files = input.files;
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('fileInput');
+    const fileList = document.getElementById('fileList');
+    const loading = document.getElementById('loading');
 
-      if (!files.length) {
-        alert('Selecione pelo menos um arquivo PDF.');
-        return;
-      }
+    let pdfFiles = [];
 
-      loader.style.display = 'block';
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.style.background = '#e8e8e8';
+    });
 
-      try {
-        const { PDFDocument } = PDFLib;
-        const mergedPdf = await PDFDocument.create();
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.background = '';
+    });
 
-        for (const file of files) {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await PDFDocument.load(arrayBuffer);
-          const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-          copiedPages.forEach(page => mergedPdf.addPage(page));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.style.background = '';
+      handleFiles(e.dataTransfer.files);
+    });
+
+    fileInput.addEventListener('change', e => {
+      handleFiles(e.target.files);
+    });
+
+    function handleFiles(files) {
+      for (let file of files) {
+        if (file.type === 'application/pdf') {
+          pdfFiles.push(file);
         }
-
-        const mergedPdfBytes = await mergedPdf.save();
-        const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
-
-        const customFileName = fileNameInput.value.trim() || 'merged.pdf';
-        const fileName = customFileName.endsWith('.pdf') ? customFileName : customFileName + '.pdf';
-
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (err) {
-        alert('Erro ao mesclar PDFs: ' + err.message);
-      } finally {
-        loader.style.display = 'none';
       }
+      updateFileList();
+    }
+
+    function updateFileList() {
+      fileList.innerHTML = '';
+      pdfFiles.forEach((file, index) => {
+        const li = document.createElement('li');
+        li.textContent = file.name;
+        li.className = 'file-item';
+        li.draggable = true;
+        li.dataset.index = index;
+
+        li.addEventListener('dragstart', e => {
+          e.dataTransfer.setData('text/plain', index);
+        });
+
+        li.addEventListener('dragover', e => e.preventDefault());
+
+        li.addEventListener('drop', e => {
+          e.preventDefault();
+          const fromIndex = e.dataTransfer.getData('text/plain');
+          const toIndex = li.dataset.index;
+          const temp = pdfFiles[fromIndex];
+          pdfFiles[fromIndex] = pdfFiles[toIndex];
+          pdfFiles[toIndex] = temp;
+          updateFileList();
+        });
+
+        fileList.appendChild(li);
+      });
+    }
+
+    async function mergePDFs() {
+      if (pdfFiles.length < 2) return alert('Selecione pelo menos 2 arquivos PDF');
+
+      loading.style.display = 'block';
+
+      const mergedPdf = await PDFLib.PDFDocument.create();
+
+      for (const file of pdfFiles) {
+        const bytes = await file.arrayBuffer();
+        const pdf = await PDFLib.PDFDocument.load(bytes);
+        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+        copiedPages.forEach(p => mergedPdf.addPage(p));
+      }
+
+      const mergedBytes = await mergedPdf.save();
+      const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      const filename = document.getElementById('outputName').value || 'mesclado.pdf';
+
+      link.href = URL.createObjectURL(blob);
+      link.download = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+      link.click();
+
+      loading.style.display = 'none';
+    }
+
+    function resetAll() {
+      pdfFiles = [];
+      updateFileList();
+      document.getElementById('outputName').value = 'mesclado.pdf';
     }
   </script>
 </body>
