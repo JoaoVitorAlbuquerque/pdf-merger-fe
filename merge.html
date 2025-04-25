@@ -269,3 +269,91 @@
     link.click();
   }
 </script>
+-----------------
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Conversor de Arquivos para PDF</title>
+</head>
+<body>
+  <h1>Conversor de .TXT e .MSG para PDF</h1>
+  <input type="file" id="fileInput" accept=".txt,.msg" />
+  <button onclick="converterParaPDF()">Converter</button>
+
+  <!-- Bibliotecas necessárias -->
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@kenjiuno/msgreader@1.0.6/dist/msgreader.min.js"></script>
+
+  <script>
+    async function converterParaPDF() {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+
+      if (!file) {
+        alert('Selecione um arquivo .txt ou .msg');
+        return;
+      }
+
+      const fileName = file.name;
+      const fileExtension = fileName.split('.').pop().toLowerCase();
+
+      const { PDFDocument, StandardFonts, rgb } = PDFLib;
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([600, 800]);
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontSize = 12;
+      let y = 750;
+
+      const drawText = (text) => {
+        const lines = text.split('\n');
+        for (const line of lines) {
+          page.drawText(line, {
+            x: 50,
+            y,
+            size: fontSize,
+            font,
+            color: rgb(0, 0, 0),
+          });
+          y -= fontSize + 4;
+          if (y < 50) {
+            y = 750;
+            page = pdfDoc.addPage([600, 800]);
+          }
+        }
+      };
+
+      if (fileExtension === 'txt') {
+        const text = await file.text();
+        drawText(text);
+      } else if (fileExtension === 'msg') {
+        const arrayBuffer = await file.arrayBuffer();
+        const reader = new MsgReader(arrayBuffer);
+        const msgData = reader.getFileData();
+
+        const subject = msgData.subject || 'Sem assunto';
+        const sender = msgData.senderEmail || 'Remetente desconhecido';
+        const body = msgData.body || 'Sem conteúdo';
+
+        drawText(`Assunto: ${subject}`);
+        drawText(`Remetente: ${sender}`);
+        drawText('');
+        drawText(body);
+      } else {
+        alert('Formato de arquivo não suportado.');
+        return;
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName.replace(/\.(txt|msg)$/, '.pdf');
+      link.click();
+    }
+  </script>
+</body>
+</html>
