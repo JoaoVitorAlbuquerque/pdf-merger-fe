@@ -7,12 +7,15 @@
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <style>
     body { font-family: Arial; padding: 20px; }
-    nav a { margin-right: 20px; cursor: pointer; }
+    nav a {
+      margin-right: 20px; 
+      cursor: pointer;
+      #message-section {
+        overflow: hidden;
+      }
+    }
     section { display: none; }
     section.active { display: block; }
-    #message-section {
-      overflow: hidden;
-    }
     .div-button-style {
       display: flex;
       align-items: center;
