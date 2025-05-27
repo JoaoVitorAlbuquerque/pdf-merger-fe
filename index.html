@@ -29,6 +29,9 @@
       justify-content: space-between;
       align-items: center;
     }
+    .file-item.dragging {
+      opacity: 0.5;
+    }
     .file-item button {
       margin-left: 10px;
       padding: 4px 8px;
@@ -103,79 +106,70 @@
       handleFiles(e.dataTransfer.files);
     });
 
-    fileInput.addEventListener('change', () => {
-      handleFiles(fileInput.files);
-    });
+    fileInput.addEventListener('change', () => handleFiles(fileInput.files));
 
     function handleFiles(files) {
-      for (let file of files) {
-        if (file.type === "application/pdf") {
+      [...files].forEach(file => {
+        if (file.type === 'application/pdf') {
           pdfFiles.push(file);
         }
-      }
-      renderFileList();
+      });
+      updateFileList();
     }
 
-    function renderFileList() {
+    function updateFileList() {
       fileList.innerHTML = '';
       pdfFiles.forEach((file, index) => {
         const li = document.createElement('li');
         li.className = 'file-item';
-
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = file.name;
-
-        const removeBtn = document.createElement('button');
-        removeBtn.textContent = 'Excluir';
-        removeBtn.onclick = () => {
-          pdfFiles.splice(index, 1);
-          renderFileList();
-        };
-
-        li.appendChild(nameSpan);
-        li.appendChild(removeBtn);
+        li.setAttribute('draggable', true);
+        li.setAttribute('data-index', index);
+        li.innerHTML = `
+          ${file.name}
+          <button onclick="removeFile(${index})">Excluir</button>
+        `;
+        addDragEvents(li);
         fileList.appendChild(li);
       });
     }
 
+    function removeFile(index) {
+      pdfFiles.splice(index, 1);
+      updateFileList();
+    }
+
+    function resetAll() {
+      pdfFiles = [];
+      fileList.innerHTML = '';
+      fileInput.value = '';
+    }
+
     async function mergePDFs() {
-      if (pdfFiles.length === 0) {
-        alert("Adicione arquivos PDF antes de mesclar.");
-        return;
-      }
+      if (pdfFiles.length === 0) return alert('Nenhum arquivo PDF selecionado.');
 
       loading.style.display = 'block';
       const mergedPdf = await PDFLib.PDFDocument.create();
 
-      for (let file of pdfFiles) {
+      for (const file of pdfFiles) {
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await PDFLib.PDFDocument.load(arrayBuffer);
         const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
         copiedPages.forEach(page => mergedPdf.addPage(page));
       }
 
-      const mergedPdfFile = await mergedPdf.save();
-      const blob = new Blob([mergedPdfFile], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = document.getElementById('outputName').value || 'mesclado.pdf';
-      a.click();
-
+      const pdfBytes = await mergedPdf.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = document.getElementById('outputName').value || 'mesclado.pdf';
+      link.click();
       loading.style.display = 'none';
     }
 
-    function resetAll() {
-      pdfFiles = [];
-      renderFileList();
-      fileInput.value = '';
-      document.getElementById('outputName').value = 'mesclado.pdf';
-    }
-
-    async function convertTxtToPDF() {
-      const file = document.getElementById('txtFileInput').files[0];
-      const outputName = document.getElementById('txtPdfName').value || 'email.pdf';
-      if (!file) return;
+    function convertTxtToPDF() {
+      const fileInput = document.getElementById('txtFileInput');
+      const file = fileInput.files[0];
+      if (!file) return alert('Selecione um arquivo TXT.');
 
       const reader = new FileReader();
       reader.onload = async function (e) {
@@ -183,29 +177,48 @@
         const pdfDoc = await PDFLib.PDFDocument.create();
         const page = pdfDoc.addPage();
         const { width, height } = page.getSize();
+        const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
         const fontSize = 12;
         const lines = text.split('\n');
-
-        const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-        let y = height - 40;
-        for (let line of lines) {
-          if (y < 40) {
-            y = height - 40;
-            page = pdfDoc.addPage();
-          }
-          page.drawText(line, { x: 40, y, size: fontSize, font });
+        let y = height - 30;
+        for (const line of lines) {
+          page.drawText(line, { x: 50, y, size: fontSize, font });
           y -= fontSize + 4;
+          if (y < 30) break;
         }
-
         const pdfBytes = await pdfDoc.save();
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = outputName;
-        a.click();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = document.getElementById('txtPdfName').value || 'email.pdf';
+        link.click();
       };
       reader.readAsText(file);
+    }
+
+    function addDragEvents(element) {
+      element.addEventListener('dragstart', e => {
+        element.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', element.dataset.index);
+      });
+
+      element.addEventListener('dragend', () => {
+        element.classList.remove('dragging');
+      });
+
+      element.addEventListener('dragover', e => {
+        e.preventDefault();
+        const dragging = document.querySelector('.dragging');
+        const targetIndex = +element.dataset.index;
+        const draggingIndex = +dragging.dataset.index;
+
+        if (draggingIndex !== targetIndex) {
+          const temp = pdfFiles[draggingIndex];
+          pdfFiles.splice(draggingIndex, 1);
+          pdfFiles.splice(targetIndex, 0, temp);
+          updateFileList();
+        }
+      });
     }
   </script>
 </body>
