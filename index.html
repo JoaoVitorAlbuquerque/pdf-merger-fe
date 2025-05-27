@@ -7,24 +7,12 @@
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <style>
     body { font-family: Arial; padding: 20px; }
-    nav {
-      overflow: hidden;
-    }
-    nav a {
-      margin-right: 20px; 
-      cursor: pointer;
-    }
+    nav { overflow: hidden; }
+    nav a { margin-right: 20px; cursor: pointer; }
     section { display: none; }
     section.active { display: block; }
-    .div-button-style {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .button-style {
-      padding: 8px;
-      cursor: pointer;
-    }
+    .div-button-style { display: flex; align-items: center; gap: 4px; }
+    .button-style { padding: 8px; cursor: pointer; }
     #drop-zone {
       border: 2px dashed #ccc;
       padding: 30px;
@@ -37,7 +25,14 @@
       padding: 8px;
       background: #f1f1f1;
       margin-bottom: 4px;
-      cursor: move;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .file-item button {
+      margin-left: 10px;
+      padding: 4px 8px;
+      cursor: pointer;
     }
     .loading { display: none; color: green; margin: 10px 0; }
   </style>
@@ -68,7 +63,6 @@
 
   <section id="message-section">
     <h2>Mensagem para PDF</h2>
-
     <input type="file" id="txtFileInput" accept=".txt" /><br><br>
     <input type="text" id="txtPdfName" value="email.pdf" placeholder="Nome do PDF" /><br><br>
     <button onclick="convertTxtToPDF()">Converter para PDF</button>
@@ -109,116 +103,109 @@
       handleFiles(e.dataTransfer.files);
     });
 
-    fileInput.addEventListener('change', e => {
-      handleFiles(e.target.files);
+    fileInput.addEventListener('change', () => {
+      handleFiles(fileInput.files);
     });
 
     function handleFiles(files) {
       for (let file of files) {
-        if (file.type === 'application/pdf') {
+        if (file.type === "application/pdf") {
           pdfFiles.push(file);
         }
       }
-      updateFileList();
+      renderFileList();
     }
 
-    function updateFileList() {
+    function renderFileList() {
       fileList.innerHTML = '';
       pdfFiles.forEach((file, index) => {
         const li = document.createElement('li');
-        li.textContent = file.name;
         li.className = 'file-item';
-        li.draggable = true;
-        li.dataset.index = index;
 
-        li.addEventListener('dragstart', e => {
-          e.dataTransfer.setData('text/plain', index);
-        });
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = file.name;
 
-        li.addEventListener('dragover', e => e.preventDefault());
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = 'Excluir';
+        removeBtn.onclick = () => {
+          pdfFiles.splice(index, 1);
+          renderFileList();
+        };
 
-        li.addEventListener('drop', e => {
-          e.preventDefault();
-          const fromIndex = e.dataTransfer.getData('text/plain');
-          const toIndex = li.dataset.index;
-          const temp = pdfFiles[fromIndex];
-          pdfFiles[fromIndex] = pdfFiles[toIndex];
-          pdfFiles[toIndex] = temp;
-          updateFileList();
-        });
-
+        li.appendChild(nameSpan);
+        li.appendChild(removeBtn);
         fileList.appendChild(li);
       });
     }
 
     async function mergePDFs() {
-      if (pdfFiles.length < 2) return alert('Selecione pelo menos 2 arquivos PDF');
+      if (pdfFiles.length === 0) {
+        alert("Adicione arquivos PDF antes de mesclar.");
+        return;
+      }
 
       loading.style.display = 'block';
       const mergedPdf = await PDFLib.PDFDocument.create();
 
-      for (const file of pdfFiles) {
-        const bytes = await file.arrayBuffer();
-        const pdf = await PDFLib.PDFDocument.load(bytes);
+      for (let file of pdfFiles) {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await PDFLib.PDFDocument.load(arrayBuffer);
         const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-        copiedPages.forEach(p => mergedPdf.addPage(p));
+        copiedPages.forEach(page => mergedPdf.addPage(page));
       }
 
-      const mergedBytes = await mergedPdf.save();
-      const blob = new Blob([mergedBytes], { type: 'application/pdf' });
-      const link = document.createElement('a');
-      const filename = document.getElementById('outputName').value || 'mesclado.pdf';
-
-      link.href = URL.createObjectURL(blob);
-      link.download = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
-      link.click();
+      const mergedPdfFile = await mergedPdf.save();
+      const blob = new Blob([mergedPdfFile], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = document.getElementById('outputName').value || 'mesclado.pdf';
+      a.click();
 
       loading.style.display = 'none';
     }
 
     function resetAll() {
       pdfFiles = [];
-      updateFileList();
+      renderFileList();
+      fileInput.value = '';
       document.getElementById('outputName').value = 'mesclado.pdf';
     }
 
     async function convertTxtToPDF() {
-      const input = document.getElementById('txtFileInput');
-      const fileName = document.getElementById('txtPdfName').value.trim() || 'email.pdf';
+      const file = document.getElementById('txtFileInput').files[0];
+      const outputName = document.getElementById('txtPdfName').value || 'email.pdf';
+      if (!file) return;
 
-      if (!input.files.length) {
-        alert('Selecione um arquivo .txt');
-        return;
-      }
+      const reader = new FileReader();
+      reader.onload = async function (e) {
+        const text = e.target.result;
+        const pdfDoc = await PDFLib.PDFDocument.create();
+        const page = pdfDoc.addPage();
+        const { width, height } = page.getSize();
+        const fontSize = 12;
+        const lines = text.split('\n');
 
-      const file = input.files[0];
-      const text = (await file.text()).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-      const pdfDoc = await PDFLib.PDFDocument.create();
-      let page = pdfDoc.addPage();
-      const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-      const fontSize = 12;
-      const { width, height } = page.getSize();
-
-      const lines = text.split('\n');
-      const lineHeight = fontSize + 4;
-      let y = height - 40;
-
-      for (let line of lines) {
-        if (y < 40) {
-          y = height - 40;
-          page = pdfDoc.addPage();
+        const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+        let y = height - 40;
+        for (let line of lines) {
+          if (y < 40) {
+            y = height - 40;
+            page = pdfDoc.addPage();
+          }
+          page.drawText(line, { x: 40, y, size: fontSize, font });
+          y -= fontSize + 4;
         }
-        page.drawText(line, { x: 40, y, size: fontSize, font });
-        y -= lineHeight;
-      }
 
-      const pdfBytes = await pdfDoc.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
-      link.click();
+        const pdfBytes = await pdfDoc.save();
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = outputName;
+        a.click();
+      };
+      reader.readAsText(file);
     }
   </script>
 </body>
